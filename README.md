@@ -1,5 +1,99 @@
 # Spring Boot Shopping Cart Web App
 
+# CI-PIPELINE
+pipeline {
+    agent any
+
+    tools {
+        jdk 'jdk-17'
+        maven 'maven'
+    }
+
+    environment {
+        SCANNER_HOME = tool 'sonar-scanner'
+    }
+
+    stages {
+
+        stage('Git Checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/Nitin201/Ekart.git'
+            }
+        }
+
+        stage('Compile') {
+            steps {
+                sh 'mvn clean compile'
+            }
+        }
+
+        stage('Check Java') {
+            steps {
+                sh "java -version"
+                sh "echo JAVA_HOME = $JAVA_HOME"
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                sh """
+                    export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+                    export PATH=\$JAVA_HOME/bin:\$PATH
+
+                    \$SCANNER_HOME/bin/sonar-scanner \
+                    -Dsonar.projectKey=Ekart \
+                    -Dsonar.projectName=Ekart \
+                    -Dsonar.sources=. \
+                    -Dsonar.java.binaries=target/classes \
+                    -Dsonar.host.url=http://13.200.200.247:9000 \
+                    -Dsonar.login=squ_696bacdb067dcb4caa9f6db1861304b142aee4e7
+                """
+            }
+        }
+
+
+        stage('Build Application') {
+            steps {
+                sh 'mvn clean install -DskipTests=true'
+            }
+        }
+
+        stage('Build & Push Docker Image') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: '220de2d0-c7db-4bb0-b9e3-27302a2b5090', toolName: 'docker') {
+                        sh "docker build -t ekart:latest -f docker/Dockerfile ."
+                        sh "docker tag ekart:latest nitin241/ekart:latest"
+                        sh "docker push nitin241/ekart:latest"
+                    }
+                }
+            }
+        }
+         stage('Trigger CD Pipeline') {
+            steps {
+                build job: "CD_PIPELEINE" , wait: true
+            }
+        }
+    
+    }
+}
+
+## CD-PIPELINE
+pipeline {
+    agent any
+
+    stages {
+        stage('Docker Deploy To Container') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: '220de2d0-c7db-4bb0-b9e3-27302a2b5090', toolName: 'docker') {
+                        sh "docker run -d --name Ekart -p 8070:8070 nitin241/ekart:latest"
+                    }
+                }
+            }
+        }
+    }
+}
 
 
 
